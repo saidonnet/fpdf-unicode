@@ -781,10 +781,6 @@ function createMultiTextImage($unicode_text, $desiredWidth, $desiredHeight, $ali
     // Define padding
     $padding = 10;
 
-    // Adjust dimensions to include padding
-//    $width = ($desiredWidth * 10);
-//    $height = ($desiredHeight * 10) ;
-
 	$width = 5000;
     $height = 5000;
 
@@ -798,7 +794,7 @@ function createMultiTextImage($unicode_text, $desiredWidth, $desiredHeight, $ali
         $draw = new ImagickDraw();
         $draw->setFillColor(new ImagickPixel('black'));
         $draw->setFont('arabic.ttf'); // Specify the path to an appropriate font
-        $draw->setFontSize(50); // Adjust the font size as needed
+        $draw->setFontSize(100); // Adjust the font size as needed
 
         // Set text alignment based on $align parameter
         switch ($align) {
@@ -874,7 +870,7 @@ function splitTextIntoLines($text, $maxCharsPerLine) {
     foreach ($words as $word) {
         $linePlusWord = $currentLine . ($currentLine ? ' ' : '') . $word;
 
-        if (strlen($linePlusWord) <= $maxCharsPerLine) {
+        if (strlen($linePlusWord) <= $maxCharsPerLine + 30) {
             $currentLine = $linePlusWord;
         } else {
             if ($currentLine) {
@@ -892,6 +888,8 @@ function splitTextIntoLines($text, $maxCharsPerLine) {
     return  $lines;
 }
 
+
+
 function MultiCellUnicode($w, $h, $txt, $border, $align, $fill) {
     $InitialY = $this->GetY();
 
@@ -907,23 +905,53 @@ function MultiCellUnicode($w, $h, $txt, $border, $align, $fill) {
 
     // Get the actual dimensions of the image
     list($imgWidth, $imgHeight) = getimagesize($imagePath);
+    $actualHeight = $imgHeight * (7/ 72); // Convert pixels to the unit used in FPDF
 
     // Add the image to the PDF
-    $this->Image($imagePath, $this->GetX() + 1, $InitialY + 1, $w - 2);
+    // Get the actual dimensions of the image
+	list($imgWidth, $imgHeight) = getimagesize($imagePath);
+
+	// Target dimensions
+	$targetWidth = $w - 2;
+	$targetHeight = $h;
+
+	// Calculate aspect ratio of the image
+	$aspectRatio = $imgWidth / $imgHeight;
+
+	// Calculate new dimensions to maintain aspect ratio
+	if ($aspectRatio > 1) {
+		// Image is wider than it is tall
+		$newHeight = $targetWidth / $aspectRatio;
+		$newWidth = $targetWidth;
+	} else {
+		// Image is taller than it is wide
+		$newWidth = $targetHeight * $aspectRatio;
+		$newHeight = $targetHeight;
+	}
+
+	// Check if new dimensions exceed the target dimensions and adjust if necessary
+	if ($newWidth > $targetWidth) {
+		$newWidth = $targetWidth;
+		$newHeight = $newWidth / $aspectRatio;
+	}
+	if ($newHeight > $targetHeight) {
+		$newHeight = $targetHeight;
+		$newWidth = $newHeight * $aspectRatio;
+	}
+
+	// Add the image to the PDF with the new dimensions
+	$this->Image($imagePath, $this->GetX() + 1, $InitialY + 1, $newWidth, $newHeight);
+
 
     // Calculate the new Y-coordinate based on the actual image height
-    $newY = $InitialY + ($imgHeight / $this->k); // Convert pixels to the unit used in FPDF
+
 
     // Draw borders and set new Y-coordinate
     if ($border) {
-        $this->Rect($this->GetX(), $InitialY, $w, $imgHeight/ $this->k);
+        $this->Rect($this->GetX(), $InitialY, $w, $h);
     }
-    $this->SetY($newY);
+    $this->SetY($actualHeight);
 }
-
-
-
-
 
 function MultiCellStandard($w, $h, $txt, $border=0, $align='J', $fill=false)
 {
