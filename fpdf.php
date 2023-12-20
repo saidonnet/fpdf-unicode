@@ -592,7 +592,7 @@ function Cell($w, $h=0, $txt='', $border=0, $ln=0, $align='', $fill=false, $link
 function CellUnicode($w, $h, $txt, $border=0, $ln=0, $align='', $fill=false, $link='') {
     if ($this->isUnicodeText($txt)) {
         // Create image from text
-        $imagePath = $this->createTextImage($txt, $w, $h);
+        $imagePath = $this->createTextImage($txt, $w, $h,$align);
 
         // Get the dimensions of the image to maintain aspect ratio
         list($imageWidth, $imageHeight) = getimagesize($imagePath);
@@ -626,12 +626,11 @@ function CellUnicode($w, $h, $txt, $border=0, $ln=0, $align='', $fill=false, $li
     }
 }
 
-
 function isUnicodeText($text) {
 	return preg_match('/[^\x00-\x7F]/', $text) ? true : false;
 }
 
-function createTextImage($unicode_text, $desiredWidth, $desiredHeight) {
+function createTextImage($unicode_text, $desiredWidth, $desiredHeight,$align) {
 
     // Define padding
     $padding = 10;
@@ -651,7 +650,20 @@ function createTextImage($unicode_text, $desiredWidth, $desiredHeight) {
         $draw->setFillColor(new ImagickPixel('black'));
         $draw->setFont('arabic.ttf'); // Adjust the font as needed
         $draw->setFontSize(50); // Adjust font size as needed
-        $draw->setTextAlignment(Imagick::ALIGN_CENTER);
+        // Set text alignment based on $align parameter
+        switch ($align) {
+            case 'L':
+                $draw->setTextAlignment(Imagick::ALIGN_LEFT);
+                break;
+            case 'C':
+                $draw->setTextAlignment(Imagick::ALIGN_CENTER);
+                break;
+            case 'R':
+                $draw->setTextAlignment(Imagick::ALIGN_RIGHT);
+                break;
+            default:
+                $draw->setTextAlignment(Imagick::ALIGN_RIGHT);
+        }
         $draw->setTextAntialias(true);
 
         // Position the text in the center with padding
@@ -764,8 +776,156 @@ function CellStandard($w, $h=0, $txt='', $border=0, $ln=0, $align='', $fill=fals
 		$this->x += $w;
 }
 
+// MultiCell >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+function createMultiTextImage($unicode_text, $desiredWidth, $desiredHeight, $align) {
+    // Define padding
+    $padding = 10;
 
-function MultiCell($w, $h, $txt, $border=0, $align='J', $fill=false)
+    // Adjust dimensions to include padding
+//    $width = ($desiredWidth * 10);
+//    $height = ($desiredHeight * 10) ;
+
+	$width = 5000;
+    $height = 5000;
+
+    try {
+        // Create a new Imagick object
+        $imagick = new Imagick();
+        $imagick->newImage($width, $height, new ImagickPixel('white'));
+        $imagick->setImageFormat("jpg");
+
+        // Set up the text properties
+        $draw = new ImagickDraw();
+        $draw->setFillColor(new ImagickPixel('black'));
+        $draw->setFont('arabic.ttf'); // Specify the path to an appropriate font
+        $draw->setFontSize(50); // Adjust the font size as needed
+
+        // Set text alignment based on $align parameter
+        switch ($align) {
+            case 'L':
+                $draw->setTextAlignment(Imagick::ALIGN_LEFT);
+                break;
+            case 'C':
+                $draw->setTextAlignment(Imagick::ALIGN_CENTER);
+                break;
+            case 'R':
+                $draw->setTextAlignment(Imagick::ALIGN_RIGHT);
+                break;
+            default:
+                $draw->setTextAlignment(Imagick::ALIGN_RIGHT);
+        }
+
+        $draw->setTextAntialias(true);
+
+        // Position the text in the center with padding
+        // Note: The y-coordinate calculation might need adjustment based on alignment
+        $metrics = $imagick->queryFontMetrics($draw, $unicode_text);
+        $x = ($width - $metrics['textWidth']) / 2;
+        $y = ($height + $metrics['textHeight']) / 2 - $padding;
+
+		// Debugging: Output metrics
+		error_log(print_r($metrics, true));
+
+		// Draw the text on the image
+		$imagick->annotateImage($draw, $x, $y, 0, $unicode_text);
+        // Optionally, trim the image to fit the text
+        $imagick->trimImage(10);
+
+        // Save the image to a file
+        $imageName = 'textImage_' . time() . '_' . uniqid() . '.jpg';
+        $fullPath = getcwd() . DIRECTORY_SEPARATOR . $imageName;
+        $imagick->writeImage($fullPath);
+
+        // Clean up
+        $draw->clear();
+        $imagick->clear();
+        $imagick->destroy();
+
+        return $fullPath;
+    } catch (Exception $e) {
+        // Handle any exceptions
+    }
+
+    return "";
+}
+
+function MultiCell($w, $h, $txt, $border=0, $align='J', $fill=false) {
+    if ($this->isUnicodeText($txt)) {
+        $this->MultiCellUnicode($w, $h, $txt, $border, $align, $fill);
+
+		file_put_contents('l.txt','MultiCellUnicode\r\n',FILE_APPEND);
+    } else {
+        // Call the original MultiCell function
+        $this->MultiCellStandard($w, $h, $txt, $border, $align, $fill);
+		file_put_contents('l.txt','MultiCellStandard\r\n',FILE_APPEND);
+    }
+}
+
+function calculateMaxCharsPerLine($width, $referenceChar) {
+    $refCharWidth = $this->GetStringWidth($referenceChar);
+    return (int)($width / $refCharWidth);
+}
+
+function splitTextIntoLines($text, $maxCharsPerLine) {
+    $words = explode(' ', $text);
+    $lines = [];
+    $currentLine = '';
+
+    foreach ($words as $word) {
+        $linePlusWord = $currentLine . ($currentLine ? ' ' : '') . $word;
+
+        if (strlen($linePlusWord) <= $maxCharsPerLine) {
+            $currentLine = $linePlusWord;
+        } else {
+            if ($currentLine) {
+                $lines[] = $currentLine;
+            }
+            $currentLine = $word;
+        }
+    }
+
+    if ($currentLine) {
+        $lines[] = $currentLine;
+    }
+
+	
+    return  $lines;
+}
+
+function MultiCellUnicode($w, $h, $txt, $border, $align, $fill) {
+    $InitialY = $this->GetY();
+
+    // Calculate characters per line
+    $maxCharsPerLine = $this->calculateMaxCharsPerLine($w, 'A');
+
+    // Split the text into lines
+    $lines = $this->splitTextIntoLines($txt, $maxCharsPerLine);
+
+    // Create a single image from the combined text
+    $combinedText = implode("\n", $lines);
+    $imagePath = $this->createMultiTextImage($combinedText, $w, $h, $align);
+
+    // Get the actual dimensions of the image
+    list($imgWidth, $imgHeight) = getimagesize($imagePath);
+
+    // Add the image to the PDF
+    $this->Image($imagePath, $this->GetX() + 1, $InitialY + 1, $w - 2);
+
+    // Calculate the new Y-coordinate based on the actual image height
+    $newY = $InitialY + ($imgHeight / $this->k); // Convert pixels to the unit used in FPDF
+
+    // Draw borders and set new Y-coordinate
+    if ($border) {
+        $this->Rect($this->GetX(), $InitialY, $w, $imgHeight/ $this->k);
+    }
+    $this->SetY($newY);
+}
+
+
+
+
+
+function MultiCellStandard($w, $h, $txt, $border=0, $align='J', $fill=false)
 {
 	// Output text with automatic or explicit line breaks
 	if(!isset($this->CurrentFont))
@@ -879,6 +1039,7 @@ function MultiCell($w, $h, $txt, $border=0, $align='J', $fill=false)
 	$this->Cell($w,$h,substr($s,$j,$i-$j),$b,2,$align,$fill);
 	$this->x = $this->lMargin;
 }
+// MultiCell <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 function Write($h, $txt, $link='')
 {
